@@ -1,35 +1,34 @@
+// En el archivo: app/(tabs)/_layout.tsx
+import { FontAwesome } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: 'blue' }}>
       <Tabs.Screen
-        name="index"
+        name="index" // Archivo: index.tsx
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Cursos',
+          tabBarIcon: ({ color }) => <FontAwesome size={28} name="book" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="explore" // Archivo: explore.tsx
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Estudiantes',
+          tabBarIcon: ({ color }) => <FontAwesome size={28} name="users" color={color} />,
         }}
       />
+      {/* --- INICIO DE LA MODIFICACIÓN --- */}
+      <Tabs.Screen
+        name="calendar" // Este será nuestro nuevo archivo: calendar.tsx
+        options={{
+          title: 'Calendario',
+          tabBarIcon: ({ color }) => <FontAwesome size={28} name="calendar" color={color} />,
+        }}
+      />
+      {/* --- FIN DE LA MODIFICACIÓN --- */}
     </Tabs>
   );
 }
