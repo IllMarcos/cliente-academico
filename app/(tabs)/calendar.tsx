@@ -1,54 +1,41 @@
-// Archivo completo y corregido: app/(tabs)/calendar.tsx
-
 import { FontAwesome } from '@expo/vector-icons';
-import { Stack, useFocusEffect } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Button, Modal, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Stack } from 'expo-router';
+import React, { useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Button,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
-import { API_URL } from '../../src/config';
+import { useDataFetching } from '../../hooks/useDataFetching';
+import * as api from '../../src/api';
 
-// Configurar el calendario en español
 LocaleConfig.locales['es'] = {
   monthNames: ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'],
   monthNamesShort: ['Ene.','Feb.','Mar.','Abr.','May.','Jun.','Jul.','Ago.','Sep.','Oct.','Nov.','Dic.'],
   dayNames: ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'],
   dayNamesShort: ['Dom.','Lun.','Mar.','Mié.','Jue.','Vie.','Sáb.'],
-  // --- CORRECCIÓN 1: Se elimina la propiedad 'today' que no es válida ---
 };
 LocaleConfig.defaultLocale = 'es';
 
-type CalendarEvent = { id: number; name: string; date: string; };
+type CalendarEvent = { id: number; name: string; date: string };
 
 export default function CalendarScreen() {
-  const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: allEvents, loading, onRefresh } = useDataFetching(api.fetchEvents);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   const [eventName, setEventName] = useState('');
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
 
-  // --- CORRECCIÓN 2: Se aplica el patrón correcto para funciones async en hooks ---
-  useFocusEffect(
-    useCallback(() => {
-      const fetchEvents = async () => {
-        try {
-          if (allEvents.length === 0) setLoading(true);
-          const response = await fetch(`${API_URL}/calendar/events`);
-          const data = await response.json();
-          setAllEvents(data);
-        } catch (err) {
-          Alert.alert("Error", "No se pudieron cargar los eventos.");
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchEvents();
-    }, [])
-  );
-
   const markedDates = useMemo(() => {
-    return allEvents.reduce((acc, event) => {
+    return (allEvents || []).reduce((acc, event) => {
       acc[event.date] = { marked: true, dotColor: 'blue' };
       return acc;
     }, {} as { [key: string]: { marked: boolean, dotColor: string } });
@@ -67,26 +54,19 @@ export default function CalendarScreen() {
   };
 
   const handleSave = async () => {
-    const isEditing = editingEvent !== null;
-    const url = isEditing ? `${API_URL}/calendar/events/${editingEvent!.id}` : `${API_URL}/calendar/events`;
-    const method = isEditing ? 'PUT' : 'POST';
-    
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: eventName, date: selectedDate }),
-    });
+    await api.saveEvent({ name: eventName, date: selectedDate }, editingEvent?.id);
     setEventName('');
     setEditingEvent(null);
-    // La lista se actualizará automáticamente en el siguiente focus
+    setModalVisible(false);
+    onRefresh();
   };
 
   const handleDelete = async (id: number) => {
-    await fetch(`${API_URL}/calendar/events/${id}`, { method: 'DELETE' });
-    // La lista se actualizará automáticamente en el siguiente focus
+    await api.deleteEvent(id);
+    onRefresh();
   };
 
-  const eventsForSelectedDate = allEvents.filter(event => event.date === selectedDate);
+  const eventsForSelectedDate = (allEvents || []).filter(event => event.date === selectedDate);
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" /></View>;
 
