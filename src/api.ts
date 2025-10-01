@@ -3,7 +3,7 @@ import { API_URL } from './config';
 // --- Tipos de Datos ---
 export type Course = { id: string; name: string; credits: number; professor: string };
 export type Student = { id: string; name: string; major: string };
-export type CalendarEvent = { id: number; name: string; date: string };
+export type CalendarEvent = { id: number; name: string; startDate: string; endDate: string };
 export type Grade = { id: number; courseName: string; score: number };
 export type GradePayload = { studentId: string; courseId: string; score: number };
 export type GPA = { gpa: number };

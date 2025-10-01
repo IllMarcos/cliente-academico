@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Button,
   Modal,
   Pressable,
@@ -24,49 +25,117 @@ LocaleConfig.locales['es'] = {
 };
 LocaleConfig.defaultLocale = 'es';
 
-type CalendarEvent = { id: number; name: string; date: string };
+type CalendarEvent = { id: number; name: string; startDate: string; endDate: string };
 
 export default function CalendarScreen() {
   const { data: allEvents, loading, onRefresh } = useDataFetching(api.fetchEvents);
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedStartDate, setSelectedStartDate] = useState('');
+  const [selectedEndDate, setSelectedEndDate] = useState('');
   const [eventName, setEventName] = useState('');
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
 
   const markedDates = useMemo(() => {
-    return (allEvents || []).reduce((acc, event) => {
-      acc[event.date] = { marked: true, dotColor: 'blue' };
-      return acc;
-    }, {} as { [key: string]: { marked: boolean, dotColor: string } });
+    const markings: { [key: string]: any } = {};
+    (allEvents || []).forEach(event => {
+      if (!event.startDate || !event.endDate) return;
+
+      const startDate = new Date(event.startDate + 'T00:00:00Z');
+      const endDate = new Date(event.endDate + 'T00:00:00Z');
+      let currentDate = new Date(startDate);
+
+      while (currentDate <= endDate) {
+        const dateString = currentDate.toISOString().split('T')[0];
+        const isStart = dateString === event.startDate;
+        const isEnd = dateString === event.endDate;
+
+        const marking: any = {
+          textColor: 'white',
+        };
+
+        if (isStart) {
+          marking.startingDay = true;
+          marking.color = 'blue';
+        }
+        if (isEnd) {
+          marking.endingDay = true;
+          marking.color = 'blue';
+        }
+        if (!isStart && !isEnd) {
+          marking.color = 'lightblue';
+        }
+
+        markings[dateString] = marking;
+
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      }
+    });
+    return markings;
   }, [allEvents]);
 
   const handleDayPress = (day: { dateString: string }) => {
-    setSelectedDate(day.dateString);
-    setEditingEvent(null);
-    setEventName('');
-    setModalVisible(true);
+    if (!selectedStartDate || (selectedStartDate && selectedEndDate)) {
+      setSelectedStartDate(day.dateString);
+      setSelectedEndDate('');
+      setEditingEvent(null);
+      setEventName('');
+      setModalVisible(true);
+    } else {
+      setSelectedEndDate(day.dateString);
+    }
   };
   
   const openModalToEdit = (event: CalendarEvent) => {
     setEditingEvent(event);
     setEventName(event.name);
+    setSelectedStartDate(event.startDate);
+    setSelectedEndDate(event.endDate);
+    setModalVisible(true);
   };
 
   const handleSave = async () => {
-    await api.saveEvent({ name: eventName, date: selectedDate }, editingEvent?.id);
-    setEventName('');
-    setEditingEvent(null);
-    setModalVisible(false);
-    onRefresh();
+    if (!eventName.trim() || !selectedStartDate) {
+      Alert.alert('Error', 'El nombre del evento y la fecha de inicio son obligatorios.');
+      return;
+    }
+    try {
+      await api.saveEvent({ name: eventName, startDate: selectedStartDate, endDate: selectedEndDate || selectedStartDate }, editingEvent?.id);
+      setEventName('');
+      setEditingEvent(null);
+      setModalVisible(false);
+      onRefresh();
+      Alert.alert('Éxito', 'El evento se ha guardado correctamente.');
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo guardar el evento.');
+    }
   };
 
-  const handleDelete = async (id: number) => {
-    await api.deleteEvent(id);
-    onRefresh();
+  const handleDelete = (id: number) => {
+    Alert.alert(
+      "Confirmar eliminación",
+      "¿Estás seguro de que quieres eliminar este evento?",
+      [
+        {
+          text: "Cancelar",
+          style: "cancel"
+        },
+        { text: "Eliminar", onPress: async () => {
+          try {
+            await api.deleteEvent(id);
+            onRefresh();
+            Alert.alert('Éxito', 'El evento se ha eliminado correctamente.');
+          } catch (error) {
+            Alert.alert('Error', 'No se pudo eliminar el evento.');
+          }
+        }}
+      ]
+    );
   };
 
-  const eventsForSelectedDate = (allEvents || []).filter(event => event.date === selectedDate);
+  const eventsForSelectedDate = (allEvents || []).filter(event => 
+    new Date(selectedStartDate) >= new Date(event.startDate) && new Date(selectedStartDate) <= new Date(event.endDate)
+  );
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" /></View>;
 
@@ -77,6 +146,7 @@ export default function CalendarScreen() {
       <Calendar
         onDayPress={handleDayPress}
         markedDates={markedDates}
+        markingType={'period'}
         monthFormat={'MMMM yyyy'}
         theme={{ todayTextColor: '#00adf5', arrowColor: 'blue' }}
       />
@@ -90,13 +160,14 @@ export default function CalendarScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
-              Eventos para {new Date(selectedDate).toLocaleDateString('es-MX', { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric' })}
+              Eventos para {new Date(selectedStartDate).toLocaleDateString('es-MX', { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric' })}
+              {selectedEndDate && ` - ${new Date(selectedEndDate).toLocaleDateString('es-MX', { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric' })}`}
             </Text>
 
-            {eventsForSelectedDate.length > 0 ? (
+            {eventsForSelectedDate.length > 0 && !editingEvent ? (
               eventsForSelectedDate.map(event => (
                 <View key={event.id} style={styles.eventItem}>
-                  <Text style={styles.eventName}>{editingEvent?.id === event.id ? '' : event.name}</Text>
+                  <Text style={styles.eventName}>{event.name}</Text>
                   <View style={styles.eventActions}>
                     <Pressable onPress={() => openModalToEdit(event)}><FontAwesome name="pencil" size={20} color="#555" /></Pressable>
                     <Pressable onPress={() => handleDelete(event.id)}><FontAwesome name="trash" size={20} color="#E74C3C" /></Pressable>
@@ -104,7 +175,7 @@ export default function CalendarScreen() {
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyText}>No hay eventos este día.</Text>
+              !editingEvent && <Text style={styles.emptyText}>No hay eventos para este día.</Text>
             )}
 
             <View style={styles.formContainer}>
@@ -113,6 +184,12 @@ export default function CalendarScreen() {
                 value={eventName} 
                 onChangeText={setEventName} 
                 placeholder={editingEvent ? "Editar nombre del evento" : "Nuevo nombre del evento"}
+              />
+               <TextInput 
+                style={styles.input} 
+                value={selectedEndDate} 
+                onChangeText={setSelectedEndDate} 
+                placeholder={"Fecha de fin (YYYY-MM-DD)"}
               />
               <Button title={editingEvent ? "Actualizar Evento" : "Añadir Evento"} onPress={handleSave} />
             </View>
